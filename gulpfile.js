@@ -1,129 +1,119 @@
-var syntax         = 'sass', // Syntax: sass or scss;
-		gulpVersion    = '4'; // Gulp version: 3 or 4
-		gmWatch        = false; // ON/OFF GraphicsMagick watching "img/_src" folder (true/false). Linux install gm: sudo apt update; sudo apt install graphicsmagick
+//Подключаем галп
+const gulp = require('gulp');
+//Объединение файлов
+const concat = require('gulp-concat');
+//Добапвление префиксов
+const autoprefixer = require('gulp-autoprefixer');
+//Оптимизация стилей
+const cleanCSS = require('gulp-clean-css');
+//Оптимизация скриптов
+const uglify = require('gulp-uglify');
+//Удаление файлов
+const del = require('del');
+//Синхронизация с браузером
+const browserSync = require('browser-sync').create();
+//Для препроцессоров стилей
+const sourcemaps = require('gulp-sourcemaps');
+//Sass препроцессор
+const sass = require('gulp-sass');
+//Less препроцессор
+const less = require('gulp-less');
+//Stylus препроцессор
+const stylus = require('gulp-stylus');
+//Модуль для сжатия изображений
+const imagemin = require('gulp-imagemin');
+//Модуль переименовывания файлов
+const rename = require('gulp-rename');
 
-var gulp          = require('gulp'),
-		gutil         = require('gulp-util' ),
-		sass          = require('gulp-sass'),
-		browserSync   = require('browser-sync'),
-		concat        = require('gulp-concat'),
-		uglify        = require('gulp-uglify'),
-		cleancss      = require('gulp-clean-css'),
-		rename        = require('gulp-rename'),
-		autoprefixer  = require('gulp-autoprefixer'),
-		notify        = require('gulp-notify'),
-		rsync         = require('gulp-rsync'),
-		imageResize   = require('gulp-image-resize'),
-		imagemin      = require('gulp-imagemin'),
-		del           = require('del');
+//Порядок подключения файлов со стилями
+const styleFiles = [
+   './src/scss/main.scss'
+]
+//Порядок подключения js файлов
+const scriptFiles = [
+   './src/js/lib.js',
+   './src/js/main.js'
+]
 
-// Local Server
-gulp.task('browser-sync', function() {
-	browserSync({
-		server: {
-			baseDir: 'app'
-		},
-		notify: false,
-	})
+//Таск для обработки стилей
+gulp.task('styles', () => {
+   //Шаблон для поиска файлов CSS
+   //Всей файлы по шаблону './src/css/**/*.css'
+   return gulp.src(styleFiles)
+      .pipe(sourcemaps.init())
+      //Указать stylus() , sass() или less()
+      .pipe(sass())
+      //Объединение файлов в один
+      .pipe(concat('style.css'))
+      //Добавить префиксы
+      .pipe(autoprefixer({
+         browsers: ['last 2 versions'],
+         cascade: false
+      }))
+      //Минификация CSS
+      // .pipe(cleanCSS({
+      //    level: 2
+      // }))
+      // .pipe(sourcemaps.write('./'))
+      // .pipe(rename({
+      //    suffix: '.min'
+      // }))
+      //Выходная папка для стилей
+      .pipe(gulp.dest('./build/css'))
+      .pipe(browserSync.reload({ stream: true }))
+      .pipe(browserSync.stream());
+
 });
 
-// Sass|Scss Styles
-gulp.task('styles', function() {
-	return gulp.src('app/scss/**/*.scss')
-	// return gulp.src('app/'+syntax+'/**/*.'+syntax+'')
-	.pipe(sass({ outputStyle: 'expanded' }).on("error", notify.onError()))
-	.pipe(rename({ suffix: '.min', prefix : '' }))
-	.pipe(autoprefixer(['last 15 versions']))
-	.pipe(cleancss( {level: { 1: { specialComments: 0 } } })) // Opt., comment out when debugging
-	.pipe(gulp.dest('app/css'))
-	.pipe(browserSync.stream())
+//Таск для обработки скриптов
+gulp.task('scripts', () => {
+   //Шаблон для поиска файлов JS
+   //Всей файлы по шаблону './src/js/**/*.js'
+   return gulp.src(scriptFiles)
+      //Объединение файлов в один
+      .pipe(concat('main.js'))
+      //Минификация JS
+      .pipe(uglify({
+         toplevel: true
+      }))
+      .pipe(rename({
+         suffix: '.min'
+      }))
+      //Выходная папка для скриптов
+      .pipe(gulp.dest('./build/js'))
+      .pipe(browserSync.stream());
 });
 
-// JS
-gulp.task('scripts', function() {
-	return gulp.src([
-		'app/libs/jquery/dist/jquery.min.js',
-		'app/js/common.js', // Always at the end
-		])
-	.pipe(concat('scripts.min.js'))
-	// .pipe(uglify()) // Mifify js (opt.)
-	.pipe(gulp.dest('app/js'))
-	.pipe(browserSync.reload({ stream: true }))
+//Таск для очистки папки build
+gulp.task('del', () => {
+   return del(['build/*'])
 });
 
-// HTML Live Reload
-gulp.task('code', function() {
-	return gulp.src('app/*.html')
-	.pipe(browserSync.reload({ stream: true }))
+//Таск для сжатия изображений
+gulp.task('img-compress', ()=> {
+   return gulp.src('./src/img/**')
+   .pipe(imagemin({
+      progressive: true
+   }))
+   .pipe(gulp.dest('./build/img/'))
 });
 
-// Deploy
-gulp.task('rsync', function() {
-	return gulp.src('app/**')
-	.pipe(rsync({
-		root: 'app/',
-		hostname: 'username@yousite.com',
-		destination: 'yousite/public_html/',
-		// include: ['*.htaccess'], // Includes files to deploy
-		exclude: ['**/Thumbs.db', '**/*.DS_Store'], // Excludes files from deploy
-		recursive: true,
-		archive: true,
-		silent: false,
-		compress: true
-	}))
+//Таск для отслеживания изменений в файлах
+gulp.task('watch', () => {
+   browserSync.init({
+      server: {
+         baseDir: "./"
+      }
+   });
+   //Следить за добавлением новых изображений
+   gulp.watch('./src/img/**', gulp.series('img-compress'))
+   //Следить за файлами со стилями с нужным расширением
+   gulp.watch('./src/scss/**/*.scss', gulp.series('styles'))
+   //Следить за JS файлами
+   gulp.watch('./src/js/**/*.js', gulp.series('scripts'))
+   //При изменении HTML запустить синхронизацию
+   gulp.watch("./*.html").on('change', browserSync.reload);
 });
 
-// Images @x1 & @x2 + Compression | Required graphicsmagick (sudo apt update; sudo apt install graphicsmagick)
-gulp.task('img1x', function() {
-	return gulp.src('app/img/_src/**/*.*')
-	.pipe(imageResize({ width: '50%' }))
-	.pipe(imagemin())
-	.pipe(gulp.dest('app/img/@1x/'))
-});
-gulp.task('img2x', function() {
-	return gulp.src('app/img/_src/**/*.*')
-	.pipe(imageResize({ width: '100%' }))
-	.pipe(imagemin())
-	.pipe(gulp.dest('app/img/@2x/'))
-});
-
-// Clean @*x IMG's
-gulp.task('cleanimg', function() {
-	return del(['app/img/@*'], { force:true })
-});
-
-// If Gulp Version 3
-if (gulpVersion == 3) {
-
-	// Img Processing Task for Gulp 3
-	gulp.task('img', ['img1x', 'img2x']);
-	
-	var taskArr = ['styles', 'scripts', 'browser-sync'];
-	gmWatch && taskArr.unshift('img');
-
-	gulp.task('watch', taskArr, function() {
-		gulp.watch('app/'+syntax+'/**/*.'+syntax+'', ['styles']);
-		gulp.watch(['libs/**/*.js', 'app/js/common.js'], ['scripts']);
-		gulp.watch('app/*.html', ['code']);
-		gmWatch && gulp.watch('app/img/_src/**/*', ['img']);
-	});
-	gulp.task('default', ['watch']);
-
-};
-
-// If Gulp Version 4
-if (gulpVersion == 4) {
-
-	// Img Processing Task for Gulp 4
-	gulp.task('img', gulp.parallel('img1x', 'img2x'));
-
-	gulp.task('watch', function() {
-		gulp.watch('app/'+syntax+'/**/*.'+syntax+'', gulp.parallel('styles'));
-		gulp.watch(['libs/**/*.js', 'app/js/common.js'], gulp.parallel('scripts'));
-		gulp.watch('app/*.html', gulp.parallel('code'));
-		gmWatch && gulp.watch('app/img/_src/**/*', gulp.parallel('img')); // GraphicsMagick watching image sources if allowed.
-	});
-	gmWatch ? gulp.task('default', gulp.parallel('img', 'styles', 'scripts', 'browser-sync', 'watch')) 
-					: gulp.task('default', gulp.parallel('styles', 'scripts', 'browser-sync', 'watch'));
-
-};
+//Таск по умолчанию, Запускает del, styles, scripts, img-compress и watch
+gulp.task('default', gulp.series('del', gulp.parallel('styles', 'scripts', 'img-compress'), 'watch'));
